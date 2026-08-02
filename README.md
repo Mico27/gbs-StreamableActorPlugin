@@ -15,7 +15,9 @@ Frames may have completely different layouts and different tile counts; the stre
 3. [Engine Settings](#engine-settings)
 4. [Size Limits and Restrictions](#size-limits-and-restrictions)
 5. [Events Reference](#events-reference)
-6. [Memory Footprint](#memory-footprint)
+6. [Engine Fields Reference](#engine-fields-reference)
+7. [Media](#media)
+8. [Memory Footprint](#memory-footprint)
 
 ---
 
