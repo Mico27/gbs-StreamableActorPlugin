@@ -1,0 +1,26 @@
+{
+  "_resourceType": "variables",
+  "variables": [
+    {
+      "id": "0",
+      "name": "ActionIndex",
+      "symbol": "var_action_index"
+    },
+    {
+      "id": "1",
+      "name": "IsStreaming",
+      "symbol": "var_is_streaming"
+    },
+    {
+      "id": "2",
+      "name": "BandBaseTile",
+      "symbol": "var_band_base_tile"
+    },
+    {
+      "id": "3",
+      "name": "BandTiles",
+      "symbol": "var_band_tiles"
+    }
+  ],
+  "constants": []
+}

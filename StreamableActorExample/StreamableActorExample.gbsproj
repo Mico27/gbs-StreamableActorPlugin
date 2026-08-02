@@ -1,0 +1,8 @@
+{
+  "_resourceType": "project",
+  "name": "StreamableActorExample",
+  "author": "Mico27",
+  "notes": "Example project for gbs-StreamableActorPlugin: player and two NPCs stream their animation frames into a small reserved sprite VRAM band.",
+  "_version": "4.2.0",
+  "_release": "10"
+}
