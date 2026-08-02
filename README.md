@@ -2,7 +2,7 @@
 
 **Version 4.3.0 — Requires GB Studio ≥ 4.3.0**
 
-An engine plugin that streams an actor's animation frames straight into sprite VRAM, one frame at a time — the way *The Legend of Zelda: Link's Awakening* streams Link's frames into a fixed tile band. A spritesheet then costs the VRAM of its **largest single frame** instead of the VRAM of **all its frames**, no matter how many frames, directions or animation states it has.
+An engine plugin that streams an actor's animation frames straight into sprite VRAM, one frame at a time. A spritesheet then costs the VRAM of its **largest single frame** instead of the VRAM of **all its frames**, no matter how many frames, directions or animation states it has.
 
 Frames may have completely different layouts and different tile counts; the streamer copies whatever the current frame needs.
 
