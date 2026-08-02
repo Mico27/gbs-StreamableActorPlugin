@@ -2,7 +2,7 @@
 
 **Version 4.3.0 — Requires GB Studio ≥ 4.3.0**
 
-An engine plugin that streams an actor's animation frames straight into sprite VRAM, one frame at a time — the way *The Legend of Zelda: Link's Awakening* streams Link's frames into a fixed tile band. A spritesheet then costs the VRAM of its **largest single frame** instead of the VRAM of **all its frames**, no matter how many frames, directions or animation states it has.
+An engine plugin that streams an actor's animation frames straight into sprite VRAM, one frame at a time. A spritesheet then costs the VRAM of its **largest single frame** instead of the VRAM of **all its frames**, no matter how many frames, directions or animation states it has.
 
 Frames may have completely different layouts and different tile counts; the streamer copies whatever the current frame needs.
 
@@ -26,10 +26,6 @@ Frames may have completely different layouts and different tile counts; the stre
 ### How GB Studio normally spends sprite VRAM
 
 The Game Boy has room for 256 sprite tiles — 192 usable by GB Studio in practice, 128 in colour-only mode. At scene load GB Studio uploads **every tile of every spritesheet used in the scene**. A 24-frame player sheet with 40 unique tiles occupies 40 tile slots for the whole scene, even though only 4 to 8 of those tiles are on screen at any moment.
-
-### How Link's Awakening does it
-
-LADX keeps a small fixed band of sprite tiles per entity and copies the tiles of the *current* frame into that band whenever the frame changes. ROM holds one contiguous tile block per frame; VRAM only ever holds the frame being drawn. That is what lets an 8×16-pixel hero have dozens of animation frames on a machine with 256 tile slots.
 
 ### What this plugin does
 
