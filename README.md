@@ -25,10 +25,6 @@ Frames may have completely different layouts and different tile counts; the stre
 
 The Game Boy has room for 256 sprite tiles — 192 usable by GB Studio in practice, 128 in colour-only mode. At scene load GB Studio uploads **every tile of every spritesheet used in the scene**. A 24-frame player sheet with 40 unique tiles occupies 40 tile slots for the whole scene, even though only 4 to 8 of those tiles are on screen at any moment.
 
-### How Link's Awakening does it
-
-LADX keeps a small fixed band of sprite tiles per entity and copies the tiles of the *current* frame into that band whenever the frame changes. ROM holds one contiguous tile block per frame; VRAM only ever holds the frame being drawn. That is what lets an 8×16-pixel hero have dozens of animation frames on a machine with 256 tile slots.
-
 ### What this plugin does
 
 - **When the project is built**, it re-packs the chosen spritesheet so every frame owns a contiguous block of tiles. Identical blocks are shared, so repeated frames cost nothing extra.
