@@ -29,7 +29,7 @@ https://github.com/user-attachments/assets/a34a7e8c-7b4e-423a-ac06-ebe73a1ccc8f
 
 ### How GB Studio normally spends sprite VRAM
 
-The Game Boy has room for 256 sprite tiles — 192 usable by GB Studio in practice, double in colour-only mode. At scene load GB Studio uploads **every tile of every spritesheet used in the scene**. A 24-frame player sheet with 40 unique tiles occupies 40 tile slots for the whole scene, even though only 4 to 8 of those tiles are on screen at any moment.
+The Game Boy has room for 256 sprite tiles, 128 of it shared with background tiles and 192 if using GBStudio's ui tiles, double in colour-only mode. At scene load GB Studio uploads **every tile of every spritesheet used in the scene**. A 24-frame player sheet with 40 unique tiles occupies 40 tile slots for the whole scene, even though only 4 to 8 of those tiles are on screen at any moment.
 
 ### What this plugin does
 
