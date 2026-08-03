@@ -6,6 +6,10 @@ An engine plugin that streams an actor's animation frames straight into sprite V
 
 Frames may have completely different layouts and different tile counts; the streamer copies whatever the current frame needs.
 
+
+https://github.com/user-attachments/assets/a34a7e8c-7b4e-423a-ac06-ebe73a1ccc8f
+
+
 ---
 
 ## Table of Contents
