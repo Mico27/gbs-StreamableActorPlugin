@@ -22,6 +22,8 @@ https://github.com/user-attachments/assets/a34a7e8c-7b4e-423a-ac06-ebe73a1ccc8f
 6. [Engine Fields Reference](#engine-fields-reference)
 7. [Media](#media)
 8. [Memory Footprint](#memory-footprint)
+9. [Bank 0 (HOME) Usage](#bank-0-home-usage)
+10. [Changelog](#changelog)
 
 ---
 
