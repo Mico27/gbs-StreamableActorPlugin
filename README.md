@@ -264,18 +264,20 @@ and settings that gate other settings only show their own contribution.
 
 ## Memory Footprint
 
-Measured from the example project with the default 4 streaming slots.
+Measured against the stock GB Studio **4.3.0-e1** engine by `measure_plugin_memory.js` (per-file SDCC compile with GB Studio's own build flags, at default engine settings; report of 2026-08-13). Figures are this plugin's *delta* versus stock — a file that replaces a stock engine file counts only the difference, which is why a plugin can come out negative. Using the plugin's events additionally compiles a few bytes of GBVM script per call into your project's script banks, on top of the fixed cost below.
 
-| | Cost |
+| Budget | Cost |
 |---|---|
-| WRAM | +56 bytes |
-| ROM (bank 0) | +89 bytes |
-| ROM (banked) | the streamer, the upload helper and the VM helpers, plus one re-packed tile block per distinct frame of each streamed sheet |
-| SRAM | none |
+| Bank 0 (HOME) | +89 bytes |
+| WRAM | +57 bytes |
+| Banked ROM | +2,134 bytes |
 
-- **WRAM:** 56 bytes — 2 engine fields, 4 slots of 13 bytes, and 2 bytes of state. Fewer slots cost proportionally less.
-- **Bank 0:** only 89 bytes are resident; the streamer itself runs from the plugin's own switchable bank. See [Bank 0 (HOME) Usage](#bank-0-home-usage).
+- **Bank 0:** 89 bytes are resident in the non-switchable bank (`streamable_actor.c`); everything else lives in a switchable bank. See [Bank 0 (HOME) Usage](#bank-0-home-usage).
+- **WRAM:** 57 bytes at the default 4 streaming slots — 13 bytes per slot plus the engine fields and state. Fewer slots cost proportionally less.
+- **Banked ROM:** 2,134 bytes for the streamer, the upload helper and the VM helpers. Each streamed sheet also compiles one re-packed tile block per distinct frame, on top of that figure.
 - **Sprite VRAM saved** per streamed actor is the whole sheet's tile count minus its largest frame's tile count — in the example, 24 tiles down to 4 for a 12-frame 16×16 sheet.
+- **Engine WRAM headroom:** a stock GB Studio 4.3.0 project leaves about **854 bytes** of WRAM free (usable engine WRAM is 7,776 bytes at 0xC0A0–0xDF00; the stock engine uses 6,922). With this plugin installed roughly **797 bytes** remain. That does not change with the number of global variables your project defines: the script memory array is a fixed 3,584 bytes at stock engine settings (VM_HEAP_SIZE + VM_MAX_CONTEXTS × VM_CONTEXT_STACK_SIZE = 768 + 16 × 64 words).
+- **SRAM:** not used.
 
 ---
 
@@ -296,16 +298,17 @@ Everything else this plugin adds lives in banked ROM.
 
 | Module | This plugin | Stock engine | Bank 0 cost |
 |---|---|---|---|
-| `streamable_actor.c` | 89 | — | +89 |
+| `core/streamable_actor.c` | 89 | — *(new file)* | +89 |
+
+Modules that replace or patch a stock engine file only cost the *difference*:
+the stock version's bank 0 bytes were being spent anyway.
 
 <details><summary>How this was measured</summary>
 
-GB Studio 4.3.2, DMG target, default engine settings. Each module's bank 0
-contribution is the `A _HOME size` record that SDCC writes into its `.rel`
-object, summed over the engine sources this plugin provides. Stock sizes come
-from building projects whose only plugin ships no engine C, so every module in
-them is the untouched engine; two such builds were compared and agreed on all
-73 shared modules.
+GB Studio 4.3.0-e1, default engine settings. Each module is compiled with the
+toolchain and flags GB Studio itself uses, and the `A _HOME size` record SDCC
+writes into the resulting `.rel` object is read back; the stock column is the
+same compile of the engine file this module replaces.
 
 The "free" figure is a stock project with this plugin and nothing else. Your
 own number will differ: other plugins, and any engine settings that change what
