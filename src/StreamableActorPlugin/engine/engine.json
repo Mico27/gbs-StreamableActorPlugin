@@ -13,13 +13,26 @@
         {
             "key": "streamable_actor_budget",
             "label": "Tiles uploaded per frame",
-            "description": "Maximum number of 8x8 sprite tiles copied to VRAM per VBlank. Higher values let several actors change frame on the same frame, but a too high value overruns VBlank and corrupts tiles. 8 is safe on DMG, 16 on Game Boy Color (double speed).",
+            "description": "Maximum number of 8x8 sprite tiles copied to VRAM per VBlank. About 4 tiles fit in a DMG VBlank (8 at Game Boy Color double speed); past that the copy runs into the visible frame and holds off the LCD interrupts that set parallax scroll and hide sprites behind the overlay, which makes the background and the sprites flicker. In VBlank mode keep this at least as large as one frame of the sheet, since a frame is never split. In VRAM buffer mode it can be as low as you like - copies there are invisible until they complete.",
             "group": "Streamable Actors",
             "type": "slider",
             "cType": "UBYTE",
-            "defaultValue": 8,
+            "defaultValue": 4,
             "min": 1,
             "max": 32
+        },
+        {
+            "key": "STREAMABLE_ACTOR_MODE",
+            "label": "Tile update mode",
+            "description": "VBlank mode copies each frame straight over the tiles the actor is drawing from, so the whole frame has to be copied inside one VBlank. VRAM buffer mode reserves twice as many tiles per streamed actor and copies into the half the actor is not drawing from, then switches the actor over to it - the copy can be spread over several VBlanks without ever being visible, so a small tile budget is safe.",
+            "group": "Streamable Actors",
+            "type": "select",
+            "cType": "define",
+            "defaultValue": "STREAM_MODE_VBLANK",
+            "options": [
+                ["STREAM_MODE_VBLANK", "VBlank mode"],
+                ["STREAM_MODE_VRAM_BUFFER", "VRAM buffer mode"]
+            ]
         },
         {
             "key": "STREAMABLE_ACTOR_SLOTS",

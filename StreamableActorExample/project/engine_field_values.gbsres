@@ -1,4 +1,9 @@
 {
   "_resourceType": "engineFieldValues",
-  "engineFieldValues": []
+  "engineFieldValues": [
+    {
+      "id": "STREAMABLE_ACTOR_MODE",
+      "value": "STREAM_MODE_VBLANK"
+    }
+  ]
 }

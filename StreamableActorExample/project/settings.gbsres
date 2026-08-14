@@ -1,8 +1,8 @@
 {
   "_resourceType": "settings",
-  "startSceneId": "6f94c75c-83e7-4bfc-ad9d-c7df73390aae",
-  "startX": 10,
-  "startY": 15,
+  "startSceneId": "016103a9-5ca6-4d51-9093-5a2430f4f65a",
+  "startX": 5,
+  "startY": 13,
   "startMoveSpeed": 1,
   "startAnimSpeed": 15,
   "startDirection": "up",
@@ -99,7 +99,7 @@
   "customControlsSelect": [
     "Shift"
   ],
-  "colorMode": "mono",
+  "colorMode": "mixed",
   "colorCorrection": "default",
   "generateDebugFilesEnabled": false,
   "compilerPreset": 3000,

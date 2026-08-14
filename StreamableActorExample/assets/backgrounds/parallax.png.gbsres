@@ -1,0 +1,12 @@
+{
+  "_resourceType": "background",
+  "id": "48eb0c6b-eb3b-41bd-824e-af8f9dbcf1bc",
+  "name": "parallax",
+  "symbol": "bg_parallax",
+  "tileColors": "",
+  "filename": "parallax.png",
+  "width": 80,
+  "height": 18,
+  "imageWidth": 640,
+  "imageHeight": 144
+}

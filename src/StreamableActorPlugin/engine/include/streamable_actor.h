@@ -13,6 +13,29 @@
 #define STREAMABLE_ACTOR_SLOTS 4
 #endif
 
+// How a new frame reaches VRAM, chosen by the STREAMABLE_ACTOR_MODE setting.
+//
+//   VBLANK      - copy the frame over the tiles the actor is drawing from.
+//                 One band per actor, but the whole frame has to be copied in
+//                 a single VBlank: anything the actor is showing while the
+//                 copy is in flight is half of one frame and half of another,
+//                 and a copy that outlasts VBlank holds off the LCD interrupt
+//                 that parallax scenes use to set the first row's scroll.
+//
+//   VRAM_BUFFER - reserve two bands per actor and copy into the one the actor
+//                 is *not* drawing from, then point the actor at it. Nothing
+//                 on screen changes until that switch, so the copy can be
+//                 spread over as many VBlanks as the tile budget needs and a
+//                 small budget becomes safe. Costs twice the sprite VRAM.
+#define STREAM_MODE_VBLANK      0
+#define STREAM_MODE_VRAM_BUFFER 1
+
+#ifndef STREAMABLE_ACTOR_MODE
+#define STREAMABLE_ACTOR_MODE STREAM_MODE_VBLANK
+#endif
+
+#define STREAM_BUFFERED (STREAMABLE_ACTOR_MODE == STREAM_MODE_VRAM_BUFFER)
+
 // Flags for vm_stream_actor()
 #define STREAM_FLAG_UPLOAD_NOW  0x01    // upload the current frame immediately
 #define STREAM_FLAG_SET_BOUNDS  0x02    // also copy the streamed sheet's bounds to the actor
@@ -50,9 +73,17 @@ typedef struct stream_slot_t {
     uint8_t bank;                   // bank holding tiles[] and frames[]
     uint8_t n_frames;
     uint8_t base_tile;              // first VRAM tile of the actor's band
-    uint8_t band_tiles;             // tiles reserved for the actor (upload clamp)
+    uint8_t band_tiles;             // tiles one frame needs (upload clamp)
     uint8_t cur_frame;              // frame currently resident in VRAM (0xFF = none)
+#if STREAM_BUFFERED
+    uint16_t band_offset[2];        // tile block resident in each half of the band
+    uint8_t band_frame[2];          // frame each half is known to hold (0xFF = none)
+#endif
 } stream_slot_t;
+
+// No block ever lands here, so it means "this half holds nothing yet".
+#define STREAM_NO_OFFSET 0xFFFFu
+#define STREAM_NO_FRAME  0xFFu
 
 extern UBYTE streamable_actor_enabled;
 extern UBYTE streamable_actor_budget;
@@ -64,11 +95,44 @@ extern stream_slot_t streamable_actor_slots[STREAMABLE_ACTOR_SLOTS];
 // streamer has its own reentrant path and does not call this.
 void streamable_actor_upload(stream_slot_t *slot, UBYTE frame) BANKED;
 
+#if STREAM_BUFFERED
+
+// VRAM buffer mode does its copying from actors_render(), in the actor.c
+// override, just before an actor's metasprite is drawn - never from VBlank.
+// By then the frame the actor is about to be drawn with is final, so the new
+// tiles and the OAM entries that reference them always agree, and the copy
+// costs ordinary main-thread time instead of holding off the LCD interrupts
+// that set parallax scroll and hide sprites behind the overlay.
+//
+// Writing over the band the actor is drawing from would be visible - the LCD
+// is mid-frame - which is why this mode keeps a second band and switches the
+// actor over once the copy is complete.
+//
+// Called once at the top of actors_render(), not per actor: by then every
+// actor's frame for this render is final, and walking the handful of streaming
+// slots is far less work than asking "is this one streamed?" for every actor
+// being drawn. A bank 0 resident, so the common case never pays for a banked
+// call into the plugin bank.
+void streamable_actor_sync_all(void) NONBANKED;
+
+// Copies one frame into the actor's spare band and switches it over. Assumes
+// its caller has already checked that the slot is live and that the frame is
+// not the one either half of the band already holds.
+void streamable_actor_sync_slot(stream_slot_t *slot, actor_t *actor) BANKED;
+
+#define STREAMABLE_ACTOR_SYNC_ALL() streamable_actor_sync_all()
+
+#else
+
 // VBlank handler doing the actual streaming, installed on first registration.
 // A thin bank 0 stub; the work happens in stream_vbl_update() in the plugin's
 // own bank.
 void streamable_actor_VBL_isr(void) NONBANKED;
 void stream_vbl_update(void) BANKED;
+
+#define STREAMABLE_ACTOR_SYNC_ALL() ((void)0)
+
+#endif
 
 void vm_stream_actor(SCRIPT_CTX *THIS) OLDCALL BANKED;
 void vm_stream_actor_stop(SCRIPT_CTX *THIS) OLDCALL BANKED;
