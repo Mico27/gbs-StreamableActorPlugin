@@ -18,8 +18,9 @@
 #include "vm.h"
 #include "macro.h"
 #include "continuous_scene.h"
-// StreamableActorPlugin: brings streamed actors' tiles in before anything
-// is drawn from them. Expands to nothing outside VRAM buffer mode.
+// StreamableActorPlugin: brings streamed actors' tiles in at the end of the
+// update pass, before anything is drawn from them. Expands to nothing outside
+// VRAM buffer mode.
 #include "streamable_actor.h"
 
 #ifdef STRICT
@@ -167,13 +168,13 @@ void actors_update(void) BANKED {
 
         actor = actor->prev;
     }
+
+    STREAMABLE_ACTOR_SYNC_ALL();
 }
 
 void actors_render(void) NONBANKED {
     UBYTE _save = CURRENT_BANK;
     static actor_t *actor;
-
-    STREAMABLE_ACTOR_SYNC_ALL();
 
     if (emote_actor) {
         SWITCH_ROM(emote_actor->sprite.bank);

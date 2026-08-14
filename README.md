@@ -48,7 +48,7 @@ Uploads happen only in a VBlank that a render pass has just fed, so the new spri
 
 1. Copy `src/StreamableActorPlugin` into your project's `plugins/` folder.
 
-   The plugin replaces one stock engine file, `core/actor.c` — identical to the stock one apart from one include and one call at the top of `actors_render()` that brings streamed actors' tiles in before anything is drawn from them (it expands to nothing in VBlank mode). Its `order` is therefore `-1`, and it ships `engineAlt/` variants for **every** other engine plugin that also replaces `actor.c`, so it can be installed alongside any of them without either losing its changes. See [Compatibility](#compatibility).
+   The plugin replaces one stock engine file, `core/actor.c` — identical to the stock one apart from one include and one call at the end of `actors_update()` that brings streamed actors' tiles in before anything is drawn from them (it expands to nothing in VBlank mode). Its `order` is therefore `-1`, and it ships `engineAlt/` variants for **every** other engine plugin that also replaces `actor.c`, so it can be installed alongside any of them without either losing its changes. See [Compatibility](#compatibility).
 2. **Give the actor a small placeholder sprite in the editor.** The actor's editor spritesheet is still loaded at scene load, so use a tiny one — a 1-frame 16×16 sprite is 4 tiles. The placeholder is only visible until the first frame is streamed.
 3. Add **Stream Actor Spritesheet** to the scene's *On Init*, or the actor's *On Init*, and pick the actor and the real spritesheet.
 4. Build. That is all — the actor now animates normally with every stock event (*Set Animation State*, *Set Animation Frame*, movement, direction changes), and the streamer follows whatever changes the frame.
@@ -67,18 +67,22 @@ Found under **Settings → Engine → Streamable Actors**.
 | **Tile update mode** | VBlank mode | How a new frame reaches VRAM — see [Tile update modes](#tile-update-modes). |
 | **Tiles uploaded per frame** | 4 | The per-VBlank upload budget, in 8×8 tiles. |
 | **Streamed actor slots** | 4 | How many actors can stream at once. |
+| **Use HDMA on Game Boy Color** *(VBlank mode only)* | on | Copy tiles with general purpose DMA — see [Tile update modes](#tile-update-modes). |
+| **Force aligned tile pools** *(VBlank mode, HDMA on)* | off | Guarantees the Game Boy Color GDMA copy, at the cost of ROM — see [The tile pool](#the-tile-pool). |
 
 ### Tile update modes
 
 **VBlank mode** (default) copies each frame straight over the tiles the actor is drawing from. One band of VRAM per actor, but the whole frame has to land inside a single VBlank — so the tile budget has to be big enough for a whole frame, and a copy that outlasts VBlank both risks dropped tile bytes and holds off the LCD interrupt parallax scenes rely on.
 
-On a **Game Boy Color** this mode moves the tiles with general purpose DMA instead: the hardware transfers 16 bytes in about 8 cycles, against roughly 208 for the same tile through the engine's byte-at-a-time copy. A four-tile frame goes from costing most of a VBlank to costing almost none of it, which is what makes the budget comfortable there. GDMA ignores the low four bits of its source address, so it is used only for sheets whose tile data landed 16-byte aligned — where it did not, the ordinary copy runs instead, slower but never wrong.
+On a **Game Boy Color** this mode moves the tiles with general purpose DMA instead: the hardware transfers 16 bytes in about 8 cycles, against roughly 208 for the same tile through the engine's byte-at-a-time copy. A four-tile frame goes from costing most of a VBlank to costing almost none of it, which is what makes the budget comfortable there. This is the **Use HDMA on Game Boy Color** setting, on by default.
 
-**VRAM buffer mode** does not touch VBlank at all. It reserves **two** bands per streamed actor and copies from the top of `actors_render()` — once per frame, before anything is drawn — into the band the actor is *not* drawing from, then switches the actor over to it. That timing gives it three properties VBlank mode cannot have:
+GDMA ignores the low four bits of its source address, so it needs tile data that starts on a 16-byte boundary — see [The tile pool](#the-tile-pool). There is no runtime check for that, deliberately: **if your streamed actors draw scrambled tiles on a Game Boy Color, the pool did not land aligned.** That is the signal to turn [Force aligned tile pools](#force-aligned-tile-pools) on. Turning **Use HDMA on Game Boy Color** off instead falls back to the byte-at-a-time copy, which is correct whatever the pool's address, just slower.
+
+**VRAM buffer mode** does not touch VBlank at all. It reserves **two** bands per streamed actor and copies from the end of `actors_update()` — once per frame, and the engine always renders immediately afterwards, so it still lands before anything is drawn — into the band the actor is *not* drawing from, then switches the actor over to it. That timing gives it three properties VBlank mode cannot have:
 
 - **Nothing is held off.** The copy is ordinary main-thread work, so the LCD interrupts that set parallax scroll and hide sprites behind the overlay run exactly when they should. This is the mode to use if either is flickering.
 - **No budget, no latency.** The whole frame is copied in one go, and the frame it copies is the one the actor is about to be drawn with, so the tiles and the OAM entries pointing at them always agree.
-- **Costs almost nothing when there is nothing to do.** The check runs once per frame over the streaming slots — not once per drawn actor — and which frame sits in each half of a band is remembered, so an unchanged or already-loaded frame is settled with a couple of byte compares in bank 0, without calling into the plugin bank at all.
+- **Costs almost nothing when there is nothing to do.** The check runs once per frame over the streaming slots — not once per drawn actor — and which frame sits in each half of a band is remembered, so an unchanged or already-loaded frame is settled with a couple of byte compares. A frame with nothing to do costs one banked call, about 48 cycles, or 0.3% of a frame.
 - **Nothing half-drawn.** The LCD is mid-frame while the copy runs, which is exactly why the second band exists — the actor keeps drawing from the finished one until the copy completes.
 - **Most frame changes copy nothing.** Frames drawn from byte-identical tiles share one block when the sheet is re-packed, so comparing block offsets is the same as comparing pixels — and both halves are compared. If the half being drawn from already holds them (a mirrored pose, a repeated step, a direction change that only flips the metasprite) nothing happens at all; if the *spare* half still holds them from earlier, the actor switches back to it without copying. A looping animation therefore settles into a ping-pong between the two halves and stops copying: across every animation in the example project, frame changes that copy fall by 74–82%.
 
@@ -110,6 +114,26 @@ Two things address it:
 ### The actor's editor spritesheet still costs VRAM
 
 The actor's editor sheet is uploaded into the reserved band before any script runs. If that sheet is bigger than the streaming band, the band grows to match it — which defeats the purpose. Always give streamed actors a stub sprite.
+
+### The tile pool
+
+Every streamed sheet in the project appends its frame blocks to one shared array, `stream_tiles_0[]`, generated at build time. A sheet's descriptor points at its own slice; nothing else changes. When the next blob would not fit in a bank the pool spills into `stream_tiles_1[]`, `stream_tiles_2[]` and so on, and a later small sheet fills whichever pool still has room.
+
+This exists for alignment. GDMA needs a source on a 16-byte boundary, and no part of the toolchain can ask for one: SDCC has no aligned attribute for the Game Boy, the assembler's `.bndry` does not survive relocation, paged areas cannot be applied to a single object in a bank, and GB Studio's link flags are fixed. Where the tile data lands is up to the bank packer.
+
+Pooling turns that from one gamble per sheet into one gamble for all of them. Every blob in a pool is a whole number of tiles, so they are all aligned or none are, and a pool is a large single object that the packer usually has to give a fresh bank — which starts at `0x4000` and is therefore aligned. In the example project the pool is 5,408 bytes across three sheets and lands at the start of its bank, so all three get GDMA; before pooling only one of the three did.
+
+It is a strong bias, not a guarantee — which is why an unaligned pool is left to show itself as scrambled tiles rather than being silently worked around.
+
+#### Force aligned tile pools
+
+Turning this engine setting on pads every tile pool out to a full 16 KB bank. A pool that size can be placed nowhere but an empty bank, which it then fills, so nothing can be linked in front of it: it starts at `0x4000` and **is** aligned. That is the only way to guarantee GDMA — every other route is closed, since SDCC for the Game Boy has no aligned attribute, the assembler's `.bndry` does not survive relocation, paged areas cannot be applied to a single object in a bank, and GB Studio's link flags are fixed.
+
+The cost is the filler, up to 16 KB per pool. In the example project one pool of 5,408 bytes is padded by 10,976 and takes bank 2 to itself; the ROM file does not grow, because the displaced content moves into banks that were empty. On a project with no spare banks it will grow the cart.
+
+Leave it off unless you are building for Game Boy Color, have measured that the pool is landing unaligned, and have the ROM to spare — the pools are usually aligned without it. It does nothing on DMG-only builds, where there is no GDMA to qualify for.
+
+The setting only applies in **VBlank mode with HDMA on** — general purpose DMA is the only thing that needs the alignment, and VRAM buffer mode copies from the render loop, where it cannot be used. It is hidden in the engine settings otherwise, and a value left over from before the mode or the HDMA setting was changed is ignored at build time rather than quietly spending ROM.
 
 ### ROM size
 
@@ -165,7 +189,7 @@ Plugins that do not replace `actor.c` — MetaTile, SceneStackEx, FadeStreet and
 node tools/gen_enginealt.js
 ```
 
-It walks the 23 combinations, picks the `actor.c` that would win without this plugin (from the highest-order plugin in that combination, using *its* merged copy when others are present), and re-applies the same edits: one include and one call at the top of `actors_render()`. Every version of that function opens the same way, so a single anchor covers all of them regardless of whether they draw the player separately or fold it into the actor loop. Anything unexpected in a base file aborts the run rather than producing a silent mis-merge.
+It walks the 23 combinations, picks the `actor.c` that would win without this plugin (from the highest-order plugin in that combination, using *its* merged copy when others are present), and re-applies the same edits: one include and one call as the last statement of `actors_update()`. No version of that function returns early, so a single anchor covers all of them regardless of whether they draw the player separately or fold it into the actor loop — and the generator refuses to write a variant whose `actors_update()` does return early. Anything unexpected in a base file aborts the run rather than producing a silent mis-merge.
 
 Re-run it whenever one of those five plugins changes its `actor.c`, then run the patch builder to produce the distributed `patched/` form and the `engineAltRules`.
 
@@ -282,6 +306,8 @@ These runtime fields back the two settings events and can also be read or writte
 | `streamable_actor_enabled` | Whether the streamer is currently running. |
 | `streamable_actor_budget` | The per-VBlank upload budget, in tiles. |
 
+`STREAMABLE_ACTOR_MODE`, `STREAMABLE_ACTOR_SLOTS` and `STREAMABLE_ACTOR_ALIGN_POOLS` are compile-time settings and have no runtime field.
+
 ---
 
 ## Media
@@ -306,10 +332,15 @@ move.
 
 | Setting | Bank 0 | WRAM | Banked ROM |
 |---|---|---|---|
-| Tile update mode → *VRAM buffer mode* | +153 B | +20 B | +280 B |
-| Streamed actor slots *(slider 1–16, default 4)* | — | 13 B/step | — |
+| Tile update mode → *VRAM buffer mode* | −124 B | +20 B | +537 B |
+| Streamed actor slots *(slider 1–16, default 4)* | — | 14 B/step | — |
+| Use HDMA on Game Boy Color | — | — | — |
+| Force aligned tile pools *(off by default — cost of turning it on)* | — | — | — |
 
-- **Streamed actor slots**: going from 1 to 16 moves WRAM by +195 B.
+- **Streamed actor slots**: going from 1 to 16 moves WRAM by +210 B.
+
+- **Use HDMA on Game Boy Color** only applies when *Tile update mode* is enabled.
+- **Force aligned tile pools** only applies when *Tile update mode* and *Use HDMA on Game Boy Color* are enabled.
 
 <details><summary>How these were measured</summary>
 
@@ -328,6 +359,11 @@ and settings that gate other settings only show their own contribution.
 </details>
 <!-- SETTINGCOST:END -->
 
+Some rows read as free above but are not, because the measurement compiles the plugin with DMG flags and reports engine code only:
+
+- **Use HDMA on Game Boy Color** lives inside `#ifdef CGB`, so a DMG measurement sees nothing either way. In a colour build it trades the guarded copy for the HDMA register writes — a little less bank 0 code, and far less VBlank time.
+- **Force aligned tile pools** compiles no engine code at all — hence the dashes — but it adds up to 16 KB of ROM *data* per tile pool. See [The tile pool](#the-tile-pool).
+
 ## Memory Footprint
 
 Measured against the stock GB Studio **4.3.0-e1** engine by `measure_plugin_memory.js` (per-file SDCC compile with GB Studio's own build flags, at default engine settings; report of 2026-08-13). Figures are this plugin's *delta* versus stock — a file that replaces a stock engine file counts only the difference, which is why a plugin can come out negative. Using the plugin's events additionally compiles a few bytes of GBVM script per call into your project's script banks, on top of the fixed cost below.
@@ -335,14 +371,14 @@ Measured against the stock GB Studio **4.3.0-e1** engine by `measure_plugin_memo
 | Budget | Cost |
 |---|---|
 | Bank 0 (HOME) | +161 bytes |
-| WRAM | +58 bytes |
-| Banked ROM | +2,149 bytes |
+| WRAM | +62 bytes |
+| Banked ROM | +2,173 bytes |
 
 - **Bank 0:** 161 bytes are resident in the non-switchable bank (`streamable_actor.c`) — the VBlank handler and the two routines that page in a sheet's data bank; everything else lives in a switchable bank. The handler decides for itself whether there is anything to copy, which is what keeps an idle VBlank off the plugin bank entirely. See [Bank 0 (HOME) Usage](#bank-0-home-usage).
-- **WRAM:** 58 bytes at the default 4 streaming slots — 13 bytes per slot plus the engine fields and state. Fewer slots cost proportionally less.
-- **Banked ROM:** 2,149 bytes for the streamer, the upload helper and the VM helpers. Each streamed sheet also compiles one re-packed tile block per distinct frame, on top of that figure.
+- **WRAM:** 62 bytes at the default 4 streaming slots — 14 bytes per slot plus the engine fields and state. Fewer slots cost proportionally less.
+- **Banked ROM:** 2,173 bytes for the streamer, the upload helper and the VM helpers. Each streamed sheet also compiles one re-packed tile block per distinct frame, on top of that figure.
 - **Sprite VRAM saved** per streamed actor is the whole sheet's tile count minus its largest frame's tile count — in the example, 24 tiles down to 4 for a 12-frame 16×16 sheet.
-- **Engine WRAM headroom:** a stock GB Studio 4.3.0 project leaves about **854 bytes** of WRAM free (usable engine WRAM is 7,776 bytes at 0xC0A0–0xDF00; the stock engine uses 6,922). With this plugin installed roughly **796 bytes** remain. That does not change with the number of global variables your project defines: the script memory array is a fixed 3,584 bytes at stock engine settings (VM_HEAP_SIZE + VM_MAX_CONTEXTS × VM_CONTEXT_STACK_SIZE = 768 + 16 × 64 words).
+- **Engine WRAM headroom:** a stock GB Studio 4.3.0 project leaves about **854 bytes** of WRAM free (usable engine WRAM is 7,776 bytes at 0xC0A0–0xDF00; the stock engine uses 6,922). With this plugin installed roughly **792 bytes** remain. That does not change with the number of global variables your project defines: the script memory array is a fixed 3,584 bytes at stock engine settings (VM_HEAP_SIZE + VM_MAX_CONTEXTS × VM_CONTEXT_STACK_SIZE = 768 + 16 × 64 words).
 - **SRAM:** not used.
 
 ---
@@ -357,8 +393,8 @@ runs out of.
 
 | | Bytes |
 |---|---|
-| Bank 0 used by this plugin | **+161** (VBlank mode) / **+314** (VRAM buffer mode) |
-| Bank 0 free with this plugin installed | **1,290** of 16,384 (92% used), or **1,137** in VRAM buffer mode |
+| Bank 0 used by this plugin | **+161** (VBlank mode) / **+37** (VRAM buffer mode) |
+| Bank 0 free with this plugin installed | **1,290** of 16,384 (92% used), or **1,414** in VRAM buffer mode |
 
 Everything else this plugin adds lives in banked ROM.
 
@@ -391,12 +427,19 @@ Grouped by the date each change was merged into the official
 Only bug fixes, new features and feature changes are listed. Engine version
 bumps, patch regeneration, packaging fixes and documentation edits are omitted.
 
+### 2026-08-14
+
+- VRAM buffer mode's per-frame check moved from the top of `actors_render()` to the end of `actors_update()` — the engine always runs the two back to back, so the tiles still land before anything is drawn from them — and is now a banked function rather than a bank 0 resident. That hands **277 bytes of bank 0 back to the project**, about a third of what a stock GB Studio project has spare, and costs one banked call per frame: roughly 48 cycles against 6, or 0.24% of a frame.
+- New **Use HDMA on Game Boy Color** setting, on by default. The general purpose DMA copy is now used without checking at run time whether the tile pool is 16-byte aligned, so a pool that is not shows up as scrambled tiles — which is the cue to turn **Force aligned tile pools** on. Turn HDMA off for the slow copy, which is correct either way.
+- New **Force aligned tile pools** setting, off by default and only shown in VBlank mode with HDMA on. It pads each tile pool out to a whole ROM bank, which forces the bank packer to give the pool a bank of its own and so guarantees the 16-byte alignment general purpose DMA needs on a Game Boy Color. Costs up to 16 KB of ROM per pool.
+- Streamed tile data is now pooled into shared `stream_tiles_N[]` arrays instead of one array per spritesheet, spilling into a new array whenever the next sheet would not fit in a bank. Every sheet in a pool shares one address, so they are all 16-byte aligned or none are, and a pool is large enough that the bank packer usually gives it a fresh bank — which is aligned. That is what decides whether Game Boy Color builds can use GDMA for the copy: in the example project all three sheets now qualify where only one did before.
+
 ### 2026-08-13
 
 - New **Tile update mode** setting. *VRAM buffer mode* copies from the render loop rather than the VBlank handler, into a second band the actor is not drawing from, then switches the actor over to it. Nothing is held off, so the LCD interrupts that set parallax scroll and hide sprites behind the overlay keep their timing — which is what makes the background and the sprites flicker when the VBlank handler runs long. It costs double the sprite VRAM per streamed actor and replaces the engine's `actor.c`. *VBlank mode* is the default and behaves exactly as before.
 - VBlank mode now uses general purpose DMA on a Game Boy Color, about 8 cycles per tile instead of 208. It applies to sheets whose tile data is 16-byte aligned, since GDMA ignores the low four bits of its source address; the ordinary copy still runs for the rest.
 - VBlank mode's handler now decides in bank 0 whether there is anything to copy — the render gate, the budget check and a look over the slots — and only calls into the plugin bank when a streamed actor has actually changed frame. A VBlank with nothing to do costs about 84 cycles instead of a banked call into a function that was going to return anyway, which is VBlank time given back to the rest of the engine.
-- VRAM buffer mode now checks its slots **once per frame** at the top of `actors_render()` rather than once per drawn actor, and remembers which frame sits in each half of a band, so a frame that is already loaded is settled with byte compares in bank 0 instead of a banked call and a bank-switched descriptor read.
+- VRAM buffer mode now checks its slots **once per frame** at the end of `actors_update()` rather than once per drawn actor, and remembers which frame sits in each half of a band, so a frame that is already loaded is settled with byte compares instead of a bank-switched descriptor read.
 - VRAM buffer mode now skips the copy when the tiles it would write are already in VRAM. Both halves of the band are checked: the half being drawn from (nothing happens at all) and the spare half (switch back to it without copying), so a looping animation ping-pongs between the two and stops copying. Measured across the example project's animations, frame changes that copy fall by 74–82%.
 - Fixed *Upload Streamed Actor Frame* writing to the wrong half of the band in VRAM buffer mode once an actor had been switched over to the spare one.
 - The plugin now replaces `core/actor.c`, so it declares `order: -1` and ships `engineAlt/` variants for all 23 combinations of the five other engine plugins that replace the same file. It loads last of the six, so none of those plugins need changes to sit alongside it.
