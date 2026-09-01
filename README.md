@@ -176,18 +176,6 @@ It ships all **23** reachable combinations: either ContinuousScene or ScreenScro
 
 Plugins that do not replace the actor handling code, such as MetaTile, SceneStackEx and FadeStreet, need no variant and do not affect the match.
 
-### Regenerating the variants
-
-The variants are generated, never merged by hand:
-
-```bash
-node tools/gen_enginealt.js
-```
-
-It walks the 23 combinations, picks the copy that would win without this plugin, and reapplies the same change: one call at the end of the actor update. No version of that function returns early, so one anchor covers all of them, and the generator refuses to write a variant where that is not true. Anything unexpected in a base file stops the run rather than producing a bad merge.
-
-Run it again whenever one of those five plugins changes its actor handling code, then run the patch builder.
-
 ---
 
 ## Events Reference
